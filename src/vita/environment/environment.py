@@ -354,6 +354,6 @@ def get_cross_environment(
 
 def get_cross_tasks(language: str = None) -> list[Task]:
     task_path = get_task_file_path("cross_domain", language)
-    with open(task_path, "r") as fp:
+    with open(task_path, "r", encoding="utf-8") as fp:
         tasks = json.load(fp)
     return [Task.model_validate(task) for task in tasks]

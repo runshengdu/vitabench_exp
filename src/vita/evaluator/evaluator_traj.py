@@ -28,6 +28,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         llm_evaluator: str = None,
         llm_args_evaluator: dict = None,
         language: str = None,
+        enable_think: bool = False,
     ) -> RewardInfo:
         """
         Calculate the reward for the simulation by using sliding window evaluation on the full trajectory
@@ -79,7 +80,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             window_start_idx = i * step
             current_rubric_states, window_eval_info = cls._evaluate_window(
                 env_info, task, window, current_rubric_states, i+1, len(windows), window_start_idx,
-                llm_evaluator, llm_args_evaluator, language
+                llm_evaluator, llm_args_evaluator, language, enable_think
             )
             window_evaluations.append(window_eval_info)
 
@@ -180,6 +181,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         llm_evaluator: str = None,
         llm_args_evaluator: dict = None,
         language: str = None,
+        enable_think: bool = False,
     ) -> tuple[dict, dict]:
         """
         Evaluate a single window and update rubric states
@@ -223,6 +225,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         assistant_message = generate(
             model=llm_evaluator,
             messages=messages,
+            enable_think=enable_think,
             **llm_args_evaluator,
         )
 
@@ -231,7 +234,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
             "assistant_message_content": assistant_message.content,
-            "assistent_message_usage": assistant_message.usage
+            "assistant_message_usage": assistant_message.usage
         }
 
         updated_states = copy.deepcopy(current_states)
@@ -340,6 +343,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> RewardInfo:
         if task.evaluation_criteria is None:
             return RewardInfo(
@@ -372,7 +376,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         current_rubric_states = cls._initialize_rubric_states(evaluation_criteria)
 
         current_rubric_states, trajectory_eval_info = cls._evaluate_trajectory(
-            env_info, task, full_trajectory, current_rubric_states, llm_evaluator, llm_args_evaluator, language
+            env_info, task, full_trajectory, current_rubric_states, llm_evaluator, llm_args_evaluator, language, enable_think
         )
 
         final_nl_rubric_checks = cls._convert_states_to_checks(current_rubric_states)
@@ -399,6 +403,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> tuple[dict, dict]:
         if llm_evaluator is None:
             llm_evaluator = DEFAULT_LLM_EVALUATOR
@@ -434,6 +439,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         assistant_message = generate(
             model=llm_evaluator,
             messages=messages,
+            enable_think=enable_think,
             **llm_args_evaluator,
         )
 
@@ -471,6 +477,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> RewardInfo:
         if task.evaluation_criteria is None:
             return RewardInfo(
@@ -508,14 +515,14 @@ class TrajectoryEvaluator(EvaluatorBase):
 
         step = window_size - overlap
         window_evaluations = [] 
-
+        
         memory = ""
         for i, window in enumerate(windows):
             print(f"Processing window {i + 1}/{len(windows)} with {len(window)} messages")
             window_start_idx = i * step
             current_evaluation, window_eval_info, memory = cls._evaluate_window_sliding_wo_rubric(
                 env_info, task, memory, current_evaluation, window, i + 1, len(windows), window_start_idx,
-                llm_evaluator, llm_args_evaluator, language
+                llm_evaluator, llm_args_evaluator, language, enable_think
             )
             window_evaluations.append(window_eval_info)
 
@@ -545,10 +552,11 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> tuple[dict, dict]:
         """
         Evaluate a single window and update rubric states
-
+        
         Returns:
             tuple: (updated_states, window_evaluation_info)
         """
@@ -590,6 +598,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         assistant_message = generate(
             model=llm_evaluator,
             messages=messages,
+            enable_think=enable_think,
             **llm_args_evaluator,
         )
 
@@ -629,6 +638,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> RewardInfo:
         if task.evaluation_criteria is None:
             return RewardInfo(
@@ -659,7 +669,7 @@ class TrajectoryEvaluator(EvaluatorBase):
                 env_info["system_time"] = f"{time_str} {weekday or ''}"
 
         final_evaluation, trajectory_eval_info = cls._evaluate_trajectory_full_traj_wo_rubric(
-            env_info, task, full_trajectory, llm_evaluator, llm_args_evaluator, language
+            env_info, task, full_trajectory, llm_evaluator, llm_args_evaluator, language, enable_think
         )
 
         final_nl_rubric_checks = cls._convert_states_to_checks_no_rubric(final_evaluation)
@@ -682,6 +692,7 @@ class TrajectoryEvaluator(EvaluatorBase):
             llm_evaluator: str = None,
             llm_args_evaluator: dict = None,
             language: str = None,
+            enable_think: bool = False,
     ) -> tuple[dict, dict]:
         if llm_evaluator is None:
             llm_evaluator = DEFAULT_LLM_EVALUATOR
@@ -711,6 +722,7 @@ class TrajectoryEvaluator(EvaluatorBase):
         assistant_message = generate(
             model=llm_evaluator,
             messages=messages,
+            enable_think=enable_think,
             **llm_args_evaluator,
         )
 

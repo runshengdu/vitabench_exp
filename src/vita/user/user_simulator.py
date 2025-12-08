@@ -46,11 +46,13 @@ class UserSimulator(BaseUser):
         llm: Optional[str] = None,
         llm_args: Optional[dict] = None,
         language: str = None,
+        enable_think: bool = False,
     ):
         super().__init__(instructions=instructions, llm=llm, llm_args=llm_args)
         self.tools = tools
         self.persona = persona
         self.language = language
+        self.enable_think = enable_think
 
     @property
     def global_simulation_guidelines(self) -> str:
@@ -131,6 +133,7 @@ class UserSimulator(BaseUser):
             model=self.llm,
             messages=messages,
             tools=self.tools,
+            enable_think=self.enable_think,
             **self.llm_args,
         )
 
@@ -171,11 +174,13 @@ class DummyUser(BaseUser):
             llm: Optional[str] = None,
             llm_args: Optional[dict] = None,
             language: str = None,
+            enable_think: bool = False,
     ):
         super().__init__(instructions=instructions, llm=llm, llm_args=llm_args)
         self.tools = tools
         self.persona = persona
         self.language = language
+        self.enable_think = enable_think
 
     @property
     def system_prompt(self) -> str:
@@ -241,6 +246,7 @@ class DummyUser(BaseUser):
             model=self.llm,
             messages=messages,
             tools=self.tools,
+            enable_think=self.enable_think,
             **self.llm_args,
         )
 

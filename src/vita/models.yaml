@@ -5,29 +5,87 @@
 default:
   base_url: <base_url>
   temperature: 0.0
-  max_input_tokens: 32768
   headers:
-    Authorization: "Bearer <api_key>"
+    Authorization: "Bearer ${DEFAULT_LLM_API_KEY}"
     Content-Type: "application/json"
 
 models:
-  - name: gpt-4.1
-    max_tokens: 8192
-    max_input_tokens: 32768
+  - name: openai/gpt-5.1
+    temperature: 1.0
+    base_url: https://openrouter.ai/api/v1/chat/completions
+    headers:
+      Authorization: "Bearer ${OPENROUTER_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 8.75
+      completion_price: 70.00
+
+  - name: anthropic/claude-sonnet-4.5
+    temperature: 1.0
+    base_url: https://openrouter.ai/api/v1/chat/completions
+    headers:
+      Authorization: "Bearer ${OPENROUTER_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 21.00
+      completion_price: 105.00
+
+  - name: google/gemini-3-pro-preview
+    temperature: 1.0
+    base_url: https://openrouter.ai/api/v1/chat/completions
+    headers:
+      Authorization: "Bearer ${OPENROUTER_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 14.00
+      completion_price: 84.00
+
+  - name: minimax-m2
+    temperature: 1.0
+    base_url: https://api.minimaxi.com/v1/chat/completions
+    headers:
+      Authorization: "Bearer ${MINIMAX_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 2.10
+      completion_price: 8.40
+  
+  - name: deepseek-chat
+    temperature: 1.0
+    base_url: https://api.deepseek.com/chat/completions
+    headers:
+      Authorization: "Bearer ${DEEPSEEK_API_KEY}"
+      Content-Type: "application/json"
     cost_1m_token_dollar:
       prompt_price: 2.00
-      completion_price: 8.00
+      completion_price: 4.00
 
-  - name: claude-3.7-sonnet
-    temperature: 0.0
-    max_tokens: 32768
-    max_input_tokens: 200000
-    thinking:
-      type: "enabled"
-      budget_tokens: 16384
+  - name: deepseek-reasoner
+    temperature: 1.0
+    base_url: https://api.deepseek.com/chat/completions
+    headers:
+      Authorization: "Bearer ${DEEPSEEK_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 2.00
+      completion_price: 4.00
+  
+  - name: glm-4.6
+    temperature: 1.0
+    base_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    headers:
+      Authorization: "Bearer ${GLM_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 4.00
+      completion_price: 16.00
 
-  - name: Doubao-Seed-1.6-thinking
-    temperature: 0.0
-    max_completion_tokens: 8192
-    max_input_tokens: 200000
-    reasoning_effort: "high"
+  - name: kimi-k2-thinking
+    temperature: 1.0
+    base_url: https://api.moonshot.ai/v1/chat/completions
+    headers:
+      Authorization: "Bearer ${MOONSHOT_API_KEY}"
+      Content-Type: "application/json"
+    cost_1m_token_dollar:
+      prompt_price: 4.00
+      completion_price: 16.00

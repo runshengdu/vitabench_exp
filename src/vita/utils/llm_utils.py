@@ -101,9 +101,12 @@ def format_messages(messages: list[Message]) -> list[dict]:
             )
             # add interleaved thinking content if exists
             if message.raw_data is not None and message.raw_data.get("message") is not None:
-                reasoning_content = message.raw_data["message"].get("reasoning_content")
-                if reasoning_content:
-                    messages_formatted[-1]["reasoning_content"] = reasoning_content
+                # Prefer reasoning_details (OpenAI/Anthropic/Google) over reasoning_content (DeepSeek)
+                reasoning_details = message.raw_data["message"].get("reasoning_details")
+                if reasoning_details is not None:
+                    messages_formatted[-1]["reasoning_details"] = reasoning_details
+                else:
+                    messages_formatted[-1]["reasoning_content"] = message.raw_data["message"].get("reasoning_content")
         elif isinstance(message, ToolMessage):
             messages_formatted.append(
                 {
@@ -120,14 +123,23 @@ def format_messages(messages: list[Message]) -> list[dict]:
 
 def to_claude_think_official(messages_formatted: list[dict], messages: list[Message]) -> list[dict]:
     try:
-        idx = -2 if messages_formatted[-1]["role"] == "tool" else -1
+        # Find the last AssistantMessage (skip trailing ToolMessages)
+        idx = -1
+        while abs(idx) <= len(messages):
+            if isinstance(messages[idx], AssistantMessage):
+                break
+            idx -= 1
+        else:
+            # No AssistantMessage found, return as-is
+            return messages_formatted
+        
         content = [
             {
                 "type": "text",
                 "text": messages[idx].content
             }
         ]
-        if messages[idx].raw_data["message"].get("tool_calls", []):
+        if messages[idx].raw_data and messages[idx].raw_data.get("message", {}).get("tool_calls", []):
             content.append(
                 {
                     "type": "tool_use",
@@ -136,7 +148,9 @@ def to_claude_think_official(messages_formatted: list[dict], messages: list[Mess
                     "input": messages[idx].raw_data["message"]["tool_calls"][0]["function"]["arguments"]
                 }
             )
-        reasoning_content = messages[idx].raw_data["message"].get("reasoning_content", None) or messages[idx].raw_data["message"].get("reasoning", None)
+        reasoning_content = None
+        if messages[idx].raw_data and messages[idx].raw_data.get("message"):
+            reasoning_content = messages[idx].raw_data["message"].get("reasoning_content", None) or messages[idx].raw_data["message"].get("reasoning", None)
         if reasoning_content:
             content.append(
                 {
@@ -149,24 +163,269 @@ def to_claude_think_official(messages_formatted: list[dict], messages: list[Mess
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(e)
+        raise e
 
     return messages_formatted
 
 
-def kwargs_adapter(data: dict, enable_think: False, messages: list) -> dict:
-    if "claude" in data["model"]:
-        if not enable_think:
-            data["thinking"] = {"type": "disabled"}
-        else:
+def apply_anthropic_prompt_cache(
+    messages_formatted: list[dict],
+    raw_messages: list[Message],
+    turn_interval: int = 3,
+    max_breakpoints: int = 4,
+) -> list[dict]:
+    """Apply Anthropic-style prompt caching for Claude via OpenRouter.
+
+    This converts system/user/assistant messages into multipart content with a
+    cache_control marker on the text block so that Anthropic/OpenRouter can
+    reuse the expensive context across requests.
+    """
+    breakpoints_used = 0
+
+    for raw_msg, formatted_msg in zip(raw_messages, messages_formatted):
+        if breakpoints_used >= max_breakpoints:
+            break
+
+        role = getattr(raw_msg, "role", None)
+        turn_idx = getattr(raw_msg, "turn_idx", None)
+
+        if role not in ("system", "user", "assistant"):
+            continue
+
+        # Require a valid turn index and only cache every `turn_interval` turns.
+        if turn_idx is None:
+            # Fallback: allow caching for system messages without explicit turn index.
+            if role == "system":
+                turn_idx = 0
+            else:
+                continue
+
+        if turn_idx % turn_interval != 0:
+            continue
+
+        content = formatted_msg.get("content")
+        if not content:
+            continue
+
+        # If the content is a plain string, wrap it as a single text block
+        # with an ephemeral cache_control marker.
+        if isinstance(content, str):
+            formatted_msg["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+            breakpoints_used += 1
+        # If the content is already a multipart list, attach cache_control to
+        # the first suitable text block that doesn't already specify it.
+        elif isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") != "text":
+                    continue
+                if "cache_control" in part:
+                    continue
+                part["cache_control"] = {"type": "ephemeral"}
+                breakpoints_used += 1
+                break
+
+    return messages_formatted
+
+
+def kwargs_adapter(data: dict, enable_think: bool, messages: list) -> dict:
+    model_name = str(data.get("model", "")).lower()
+    if "claude" in model_name:
+        # Claude via OpenRouter: enable reasoning tokens using unified `reasoning` parameter
+        if enable_think:
+            # Ensure we have a reasonable max_tokens for both output and reasoning budget
+            max_tokens = data.get("max_tokens")
+            if not isinstance(max_tokens, int) or max_tokens <= 0:
+                # Use a conservative default if not provided by caller/config
+                max_tokens = 8192
+                data["max_tokens"] = max_tokens
+
+            # If caller hasn't already set a reasoning config, enable medium-effort reasoning
+            if "reasoning" not in data:
+                data["reasoning"] = {"effort": "medium"}
+
+            # Additionally, for Claude we still transform the last assistant message
+            # into Anthropic's official content format (with optional thinking block)
             data["messages"] = to_claude_think_official(data["messages"], messages)
+        else:
+            # Thinking disabled: remove any explicit reasoning config if present
+            data.pop("reasoning", None)
+
+        # For Anthropic Claude via OpenRouter, enable prompt caching on system
+        # messages by inserting cache_control markers into the text content.
+        data["messages"] = apply_anthropic_prompt_cache(data["messages"], messages)
     else:
-        if not enable_think:
-            if data.get("model", "") == "gpt-5":
-                data["reasoning_effort"] = "minimal"
-            elif "reasoning_effort" in data:
-                data.pop("reasoning_effort")
+        # Non-Claude models: use a generic top-level thinking flag without changing messages
+        if enable_think:
+            data["thinking"] = {"type": "enabled"}
+        else:
+            data["thinking"] = {"type": "disabled"}
     return data
+
+
+def _parse_stream_response(response: requests.Response, model: str) -> dict:
+    """
+    Parse streaming response and aggregate chunks into a complete response.
+    
+    Args:
+        response: The streaming response object.
+        model: The model name for cost calculation.
+    
+    Returns:
+        Aggregated response dictionary in the same format as non-streaming response.
+    """
+    content_parts = []
+    reasoning_parts = []  # For string-based reasoning
+    reasoning_acc = {}  # For structured reasoning: (index, type, format) -> accumulated dict
+    reasoning_order = []  # Track order of reasoning entries
+    tool_calls_dict = {}  # id -> {id, function: {name, arguments}}
+    usage = None
+    role = "assistant"
+    
+    for line in response.iter_lines():
+        if not line:
+            continue
+        
+        line_str = line.decode('utf-8') if isinstance(line, bytes) else line
+        
+        # Skip non-data lines
+        if not line_str.startswith('data: '):
+            continue
+        
+        data_str = line_str[6:]  # Remove 'data: ' prefix
+        
+        # Skip [DONE] marker
+        if data_str.strip() == '[DONE]':
+            continue
+        
+        try:
+            chunk = json.loads(data_str)
+        except json.JSONDecodeError:
+            continue
+        
+        # Extract usage if present (usually in the last chunk)
+        if 'usage' in chunk and chunk['usage']:
+            usage = chunk['usage']
+        
+        # Process choices
+        choices = chunk.get('choices', [])
+        if not choices:
+            continue
+        
+        delta = choices[0].get('delta', {})
+        
+        # Get role if present
+        if 'role' in delta:
+            role = delta['role']
+        
+        # Aggregate content
+        if 'content' in delta and delta['content']:
+            content_parts.append(delta['content'])
+        
+        # Aggregate reasoning content (for thinking models)
+        # reasoning_content: string (DeepSeek)
+        # reasoning_details: list of dicts (OpenAI/Anthropic/Google)
+        delta_reasoning_content = delta.get('reasoning_content')
+        if delta_reasoning_content and isinstance(delta_reasoning_content, str):
+            reasoning_parts.append(delta_reasoning_content)
+        
+        delta_reasoning_details = delta.get('reasoning_details')
+        if delta_reasoning_details and isinstance(delta_reasoning_details, list):
+            # List-based structured reasoning (e.g., OpenAI/Gemini/Anthropic)
+            # Aggregate entries by (index, type, format) and concatenate their string fields
+            for item in delta_reasoning_details:
+                if not isinstance(item, dict):
+                    continue
+                
+                key = (
+                    item.get("index"),
+                    item.get("type"),
+                    item.get("format"),
+                )
+                
+                if key not in reasoning_acc:
+                    reasoning_acc[key] = {}
+                    reasoning_order.append(key)
+                
+                acc_item = reasoning_acc[key]
+                
+                # Copy all fields, concatenating string content fields
+                for k, v in item.items():
+                    if k in ("summary", "text", "data", "signature"):
+                        # Concatenate content string fields across chunks
+                        if isinstance(v, str):
+                            prev = acc_item.get(k, "") or ""
+                            acc_item[k] = prev + v
+                    elif k not in acc_item:
+                        # Copy other fields once
+                        acc_item[k] = v
+        
+        # Aggregate tool calls
+        if 'tool_calls' in delta and delta['tool_calls']:
+            for tc in delta['tool_calls']:
+                tc_index = tc.get('index', 0)
+                if tc_index not in tool_calls_dict:
+                    tool_calls_dict[tc_index] = {
+                        'id': tc.get('id', ''),
+                        'type': 'function',
+                        'function': {
+                            'name': '',
+                            'arguments': ''
+                        }
+                    }
+                
+                if tc.get('id'):
+                    tool_calls_dict[tc_index]['id'] = tc['id']
+                
+                if 'function' in tc:
+                    if tc['function'].get('name'):
+                        tool_calls_dict[tc_index]['function']['name'] = tc['function']['name']
+                    if tc['function'].get('arguments'):
+                        tool_calls_dict[tc_index]['function']['arguments'] += tc['function']['arguments']
+    
+    # Build aggregated response
+    aggregated_content = ''.join(content_parts) if content_parts else None
+    
+    # Build aggregated reasoning
+    # reasoning_content: string 
+    aggregated_reasoning_content = ''.join(reasoning_parts) if reasoning_parts else None
+    # reasoning_details: list of dicts (OpenAI/Anthropic/Google)
+    aggregated_reasoning_details = [reasoning_acc[k] for k in reasoning_order] if reasoning_order else None
+    
+    # Convert tool_calls_dict to list
+    tool_calls_list = None
+    if tool_calls_dict:
+        tool_calls_list = [tool_calls_dict[i] for i in sorted(tool_calls_dict.keys())]
+    
+    # Build message
+    message = {
+        'role': role,
+        'content': aggregated_content,
+        'tool_calls': tool_calls_list
+    }
+    
+    if aggregated_reasoning_content:
+        message['reasoning_content'] = aggregated_reasoning_content
+    if aggregated_reasoning_details:
+        message['reasoning_details'] = aggregated_reasoning_details
+    
+    # Build final response structure
+    aggregated_response = {
+        'choices': [{
+            'message': message,
+            'finish_reason': 'stop'
+        }],
+        'usage': usage or {'prompt_tokens': 0, 'completion_tokens': 0}
+    }
+    
+    return aggregated_response
 
 
 def generate(
@@ -178,7 +437,7 @@ def generate(
     **kwargs: Any,
 ) -> UserMessage | AssistantMessage:
     """
-    Generate a response from the model.
+    Generate a response from the model using streaming to avoid gateway timeout.
 
     Args:
         model: The model to use.
@@ -201,7 +460,8 @@ def generate(
             data = {
                 "model": model,
                 "messages": messages_formatted,
-                "stream": False,
+                "stream": True,
+                "stream_options": {"include_usage": True},
                 "temperature": kwargs.get("temperature"),
                 "tools": tools,
                 "tool_choice": tool_choice,
@@ -214,10 +474,17 @@ def generate(
             retry_delay = 1
             for attempt in range(max_retries + 1):
                 try:
-                    response = requests.post(data["base_url"], json=data, headers=headers, timeout=(10, 600))
+                    response = requests.post(
+                        data["base_url"], 
+                        json=data, 
+                        headers=headers, 
+                        timeout=(10, 600),
+                        stream=True
+                    )
 
                     if response.status_code != 500:
-                        response = response.json()
+                        # Parse streaming response and aggregate
+                        response = _parse_stream_response(response, model)
                         break
 
                     if attempt < max_retries:
@@ -247,6 +514,12 @@ def generate(
             "The response should be an assistant message"
         )
         content = response['message'].get('content')
+        # Prefer reasoning_details (OpenAI/Anthropic/Google) over reasoning_content (DeepSeek)
+        reasoning_content = (
+            response['message'].get('reasoning_details')
+            or response['message'].get('reasoning_content')
+            or response['message'].get('reasoning')
+        )
         tool_calls = response['message'].get('tool_calls') or []
         tool_calls = [
             ToolCall(
@@ -260,6 +533,7 @@ def generate(
         message = AssistantMessage(
             role="assistant",
             content=content,
+            reasoning_content=reasoning_content,
             tool_calls=tool_calls,
             cost=cost,
             usage=usage,
@@ -270,6 +544,7 @@ def generate(
         import traceback
         traceback.print_exc()
         logger.error(e)
+        raise RuntimeError(f"LLM API call failed after all retries: {e}") from e
 
 
 def get_cost(messages: list[Message]) -> tuple[float, float] | None:

@@ -23,9 +23,21 @@ def _deep_merge_dict(base_dict: dict, override_dict: dict) -> dict:
     return result
 
 
+def _expand_env_vars(value):
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    if isinstance(value, str):
+        return os.path.expandvars(value)
+    return value
+
+
 try:
     with open(_models_yaml_path, 'r') as f:
         models_config_yaml = yaml.load(f, Loader=yaml.FullLoader)
+
+    models_config_yaml = _expand_env_vars(models_config_yaml)
 
     default_model_config = models_config_yaml.get('default', {})
 
@@ -49,16 +61,19 @@ DEFAULT_MAX_STEPS = 300
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_MAX_ERRORS = 10
 DEFAULT_SEED = 300
-DEFAULT_MAX_CONCURRENCY = 1
+DEFAULT_MAX_CONCURRENCY = 15
 DEFAULT_NUM_TRIALS = 1
 DEFAULT_SAVE_TO = None
 DEFAULT_LOG_LEVEL = "DEBUG"
-DEFAULT_LANGUAGE = "chinese"
+DEFAULT_LANGUAGE = "english"
 DEFAULT_EVALUATION_TYPE = "trajectory"
+DEFAULT_ENABLE_THINK_AGENT = True
+DEFAULT_ENABLE_THINK_USER = False
+DEFAULT_ENABLE_THINK_EVALUATOR = True
 
 # LLM
 DEFAULT_AGENT_IMPLEMENTATION = "llm_agent"
 DEFAULT_USER_IMPLEMENTATION = "user_simulator"
-DEFAULT_LLM_AGENT = "gpt-4.1"
-DEFAULT_LLM_USER = "gpt-4.1"
-DEFAULT_LLM_EVALUATOR = "anthropic.claude-3.7-sonnet"
+DEFAULT_LLM_AGENT = "deepseek-reasoner"
+DEFAULT_LLM_USER = "deepseek-chat"
+DEFAULT_LLM_EVALUATOR = "deepseek-reasoner"

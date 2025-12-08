@@ -21,6 +21,9 @@ from vita.config import (
     DEFAULT_SEED,
     DEFAULT_LLM_EVALUATOR,
     DEFAULT_LANGUAGE,
+    DEFAULT_ENABLE_THINK_AGENT,
+    DEFAULT_ENABLE_THINK_USER,
+    DEFAULT_ENABLE_THINK_EVALUATOR,
     models
 )
 from vita.data_model.message import Message
@@ -185,11 +188,25 @@ class RunConfig(BaseModel):
             default=None,
         ),
     ]
-    enable_think: Annotated[
+    enable_think_agent: Annotated[
         bool,
         Field(
             description="Whether to enable think step for the agent",
-            default=False,
+            default=DEFAULT_ENABLE_THINK_AGENT,
+        ),
+    ]
+    enable_think_user: Annotated[
+        bool,
+        Field(
+            description="Whether to enable think step for the user simulator",
+            default=DEFAULT_ENABLE_THINK_USER,
+        ),
+    ]
+    enable_think_evaluator: Annotated[
+        bool,
+        Field(
+            description="Whether to enable think step for the evaluator",
+            default=DEFAULT_ENABLE_THINK_EVALUATOR,
         ),
     ]
     language: Annotated[

@@ -11,6 +11,7 @@ def evaluate_simulation(
     llm_evaluator: str = None,
     llm_args_evaluator: dict = None,
     language: str = None,
+    enable_think: bool = False,
 ) -> RewardInfo:
     """
     Evaluate the simulation based on the evaluation type.
@@ -39,6 +40,7 @@ def evaluate_simulation(
             llm_evaluator=llm_evaluator,
             llm_args_evaluator=llm_args_evaluator,
             language=language,
+            enable_think=enable_think,
         )
     elif evaluation_type == "trajectory_full_traj_rubric":
         reward_info = TrajectoryEvaluator.calculate_reward_full_traj_rubric(
@@ -48,6 +50,7 @@ def evaluate_simulation(
             llm_evaluator=llm_evaluator,
             llm_args_evaluator=llm_args_evaluator,
             language=language,
+            enable_think=enable_think,
         )
     elif evaluation_type == "trajectory_sliding_wo_rubric":
         reward_info = TrajectoryEvaluator.calculate_reward_sliding_wo_rubric(
@@ -57,6 +60,7 @@ def evaluate_simulation(
             llm_evaluator=llm_evaluator,
             llm_args_evaluator=llm_args_evaluator,
             language=language,
+            enable_think=enable_think,
         )
     elif evaluation_type == "trajectory_full_traj_wo_rubric":
         reward_info = TrajectoryEvaluator.calculate_reward_full_traj_wo_rubric(
@@ -66,6 +70,7 @@ def evaluate_simulation(
             llm_evaluator=llm_evaluator,
             llm_args_evaluator=llm_args_evaluator,
             language=language,
+            enable_think=enable_think,
         )
     else:
         raise ValueError(f"Unknown evaluation type: {evaluation_type}")

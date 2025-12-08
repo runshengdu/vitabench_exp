@@ -166,10 +166,10 @@ class ConsoleDisplay:
         sim_info.append(f"{simulation.termination_reason}\n")
         if simulation.agent_cost is not None:
             sim_info.append("Agent Cost: ", style="bold cyan")
-            sim_info.append(f"${simulation.agent_cost:.4f}\n")
+            sim_info.append(f"RMB:{simulation.agent_cost:.4f}\n")
         if simulation.user_cost is not None:
             sim_info.append("User Cost: ", style="bold cyan")
-            sim_info.append(f"${simulation.user_cost:.4f}\n")
+            sim_info.append(f"RMB:{simulation.user_cost:.4f}\n")
         if simulation.reward_info:
             marker = "✅" if is_successful(simulation.reward_info.reward) else "❌"
             sim_info.append("Reward: ", style="bold cyan")
@@ -305,7 +305,7 @@ class ConsoleDisplay:
                 content.append("\n")
             
             content.append("💰 Average Cost per Conversation: ", style="bold cyan")
-            content.append(f"${metrics.avg_agent_cost:.4f}\n", style="white")
+            content.append(f"RMB:{metrics.avg_agent_cost:.4f}\n", style="white")
             
         else:
             # Original display for single evaluation type
@@ -338,7 +338,7 @@ class ConsoleDisplay:
                     content.append(f"{average_at_n_value:.3f}", style="white")
 
             content.append("\n\n💰 Average Cost per Conversation: ", style="bold cyan")
-            content.append(f"${metrics.avg_agent_cost:.4f}\n", style="white")
+            content.append(f"RMB:{metrics.avg_agent_cost:.4f}\n", style="white")
 
         # Display total duration
         if metrics.total_duration:
@@ -376,9 +376,9 @@ class MarkdownDisplay:
         output.append(f"**Duration**: {sim.duration:.2f}s")
         output.append(f"**Termination**: {sim.termination_reason}")
         if sim.agent_cost is not None:
-            output.append(f"**Agent Cost**: ${sim.agent_cost:.4f}")
+            output.append(f"**Agent Cost**: RMB:{sim.agent_cost:.4f}")
         if sim.user_cost is not None:
-            output.append(f"**User Cost**: ${sim.user_cost:.4f}")
+            output.append(f"**User Cost**: RMB:{sim.user_cost:.4f}")
 
         if sim.reward_info:
             output.append(f"**Reward**: {sim.reward_info.reward:.4f}")

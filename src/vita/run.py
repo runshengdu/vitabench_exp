@@ -99,8 +99,8 @@ def make_run_name(config: RunConfig) -> str:
     clean_llm_user_name = config.llm_user.split("/")[-1]
     user_name = f"{config.user}_{clean_llm_user_name}"
 
-    # Add think mode indicator to the filename if enable_think is True
-    think_suffix = "_think" if config.enable_think else ""
+    # Add think mode indicator to the filename if any enable_think is True
+    think_suffix = "_think" if config.enable_think_agent else ""
     
     return f"{get_now()}_{config.domain}_{agent_name}_{user_name}{think_suffix}"
 
@@ -151,7 +151,9 @@ def run_domain(config: RunConfig) -> Results:
         max_concurrency=config.max_concurrency,
         seed=config.seed,
         log_level=config.log_level,
-        enable_think=config.enable_think,
+        enable_think_agent=config.enable_think_agent,
+        enable_think_user=config.enable_think_user,
+        enable_think_evaluator=config.enable_think_evaluator,
         llm_evaluator=config.llm_evaluator,
         llm_args_evaluator=config.llm_args_evaluator,
         language=config.language,
@@ -189,7 +191,9 @@ def run_tasks(
     max_concurrency: int = 1,
     seed: Optional[int] = 300,
     log_level: Optional[str] = "INFO",
-    enable_think: bool = False,
+    enable_think_agent: bool = False,
+    enable_think_user: bool = False,
+    enable_think_evaluator: bool = False,
     llm_evaluator: Optional[str] = None,
     llm_args_evaluator: Optional[dict] = None,
     language: str = None,
@@ -216,7 +220,9 @@ def run_tasks(
         max_concurrency (int): The maximum number of concurrent simulations to run.
         seed (int): The seed to use for the simulation.
         log_level (str): The log level to use.
-        enable_think (bool): Whether to enable think mode for the agent LLM.
+        enable_think_agent (bool): Whether to enable think mode for the agent LLM.
+        enable_think_user (bool): Whether to enable think mode for the user simulator LLM.
+        enable_think_evaluator (bool): Whether to enable think mode for the evaluator LLM.
     Returns:
         The simulation results and the annotations (if llm_review is True).
     """
@@ -281,7 +287,7 @@ def run_tasks(
                 raise FileExistsError(
                     f"File {save_to} already exists. Please delete it or use a different save_to name."
                 )
-            with open(save_to, "r") as fp:
+            with open(save_to, "r", encoding="utf-8") as fp:
                 prev_simulation_results = Results.model_validate_json(fp.read())
                 # Check if the run config has changed
                 if get_pydantic_hash(prev_simulation_results.info) != get_pydantic_hash(
@@ -335,7 +341,7 @@ def run_tasks(
             if not save_to.parent.exists():
                 save_to.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"Saving simulation batch to {save_to}")
-            with open(save_to, "w") as fp:
+            with open(save_to, "w", encoding="utf-8") as fp:
                 fp.write(simulation_results.model_dump_json(indent=2))
 
     def _save(simulation: SimulationRun):
@@ -346,7 +352,7 @@ def run_tasks(
         if save_to is None:
             return
         with lock:
-            with open(save_to, "r") as fp:
+            with open(save_to, "r", encoding="utf-8") as fp:
                 ckpt = json.load(fp)
             
             simulation_dict = simulation.model_dump()
@@ -373,8 +379,9 @@ def run_tasks(
                 max_errors=max_errors,
                 evaluation_type=evaluation_type,
                 seed=seed,
-                max_retries=3, # Each task retries 3 times
-                enable_think=enable_think,
+                enable_think_agent=enable_think_agent,
+                enable_think_user=enable_think_user,
+                enable_think_evaluator=enable_think_evaluator,
                 llm_evaluator=llm_evaluator,
                 llm_args_evaluator=llm_args_evaluator,
                 language=language,
@@ -386,10 +393,9 @@ def run_tasks(
             return {"status": "success", "simulation": simulation}
         except Exception as e:
             logger.error(f"Error running task {task.id}, trial {trial}: {e}")
-            logger.warning(f"Task {task.id}, trial {trial} failed but continuing with other tasks")
             if console_display:
                 ConsoleDisplay.console.print(f"[bold red]Task {task.id}, trial {trial} failed: {e}[/bold red]")
-            return {"status": "failed", "task_id": task.id, "trial": trial, "error": str(e)}
+            raise RuntimeError(f"Task {task.id}, trial {trial} failed: {e}") from e
 
     args = []
     for i, task in enumerate(tasks):
@@ -451,8 +457,9 @@ def run_task(
     max_errors: int = 10,
     evaluation_type: EvaluationType = "trajectory",
     seed: Optional[int] = None,
-    max_retries: int = 3,  # Add maximum retry count parameter
-    enable_think: bool = False,
+    enable_think_agent: bool = False,
+    enable_think_user: bool = False,
+    enable_think_evaluator: bool = False,
     llm_evaluator: Optional[str] = None,
     llm_args_evaluator: Optional[dict] = None,
     language: str = None,
@@ -474,45 +481,35 @@ def run_task(
          max_errors (int): The maximum number of errors to allow in the simulation.
          evaluation_type (EvaluationType): The type of evaluation to use.
          seed (int): The seed to use for the simulation.
-         max_retries (int): The maximum number of retries if an error occurs.
      Returns:
          The simulation run.
     """
-
     if max_steps <= 0:
         raise ValueError("Max steps must be greater than 0")
     if max_errors <= 0:
         raise ValueError("Max errors must be greater than 0")
 
-    for attempt in range(max_retries + 1):  # +1 because the first attempt is not counted as a retry
-        try:
-            return _run_task_internal(
-                domain=domain,
-                task=task,
-                agent=agent,
-                user=user,
-                llm_agent=llm_agent,
-                llm_args_agent=llm_args_agent,
-                llm_user=llm_user,
-                llm_args_user=llm_args_user,
-                max_steps=max_steps,
-                max_errors=max_errors,
-                evaluation_type=evaluation_type,
-                seed=seed,
-                enable_think=enable_think,
-                llm_evaluator=llm_evaluator,
-                llm_args_evaluator=llm_args_evaluator,
-                language=language
-            )
-        except Exception as e:
-            if attempt < max_retries:
-                logger.warning(f"Task {task.id} failed on attempt {attempt + 1}/{max_retries + 1}: {e}. Retrying...")
-                # Clear global state, prepare for retry
-                _clear_global_state()
-                continue
-            else:
-                logger.error(f"Task {task.id} failed after {max_retries + 1} attempts. Last error: {e}")
-                raise e
+    # Directly run without task-level retry - LLM API errors should interrupt immediately
+    return _run_task_internal(
+        domain=domain,
+        task=task,
+        agent=agent,
+        user=user,
+        llm_agent=llm_agent,
+        llm_args_agent=llm_args_agent,
+        llm_user=llm_user,
+        llm_args_user=llm_args_user,
+        max_steps=max_steps,
+        max_errors=max_errors,
+        evaluation_type=evaluation_type,
+        seed=seed,
+        enable_think_agent=enable_think_agent,
+        enable_think_user=enable_think_user,
+        enable_think_evaluator=enable_think_evaluator,
+        llm_evaluator=llm_evaluator,
+        llm_args_evaluator=llm_args_evaluator,
+        language=language
+    )
 
 
 def _run_task_internal(
@@ -528,7 +525,9 @@ def _run_task_internal(
     max_errors: int = 10,
     evaluation_type: EvaluationType = "trajectory",
     seed: Optional[int] = None,
-    enable_think: bool = False,
+    enable_think_agent: bool = False,
+    enable_think_user: bool = False,
+    enable_think_evaluator: bool = False,
     llm_evaluator: Optional[str] = None,
     llm_args_evaluator: Optional[dict] = None,
     language: str = None,
@@ -537,16 +536,19 @@ def _run_task_internal(
     Internal implementation of run_task without retry logic.
     """
     _clear_global_state()
-    
+
     global registry
     logger.info(
         f"STARTING SIMULATION: Domain: {domain}, Task: {task.id}, Agent: {agent}, User: {user}"
     )
+
+    # Build environment
     if "," in domain:
         environment = get_cross_environment(domain, task.environment, language)
     else:
         environment_constructor = registry.get_env_constructor(domain)
         environment = environment_constructor(task.environment, language)
+
     AgentConstructor = registry.get_agent_constructor(agent)
 
     solo_mode = False
@@ -555,25 +557,26 @@ def _run_task_internal(
     global_time = time
     logger.info(f"|| Time Set To: {time}")
 
+    # Construct agent (LLMAgent or LLMSoloAgent) with enable_think_agent
     if issubclass(AgentConstructor, LLMAgent):
-        agent = AgentConstructor(
+        agent_instance = AgentConstructor(
             tools=environment.get_tools(),
             domain_policy=environment.get_policy(),
             llm=llm_agent,
             llm_args=llm_args_agent,
             time=time,
-            enable_think=enable_think,
+            enable_think=enable_think_agent,
             language=language,
         )
     elif issubclass(AgentConstructor, LLMSoloAgent):
         solo_mode = True
-        agent = AgentConstructor(
+        agent_instance = AgentConstructor(
             tools=environment.get_tools(),
             domain_policy=environment.get_policy(),
             llm=llm_agent,
             llm_args=llm_args_agent,
             time=time,
-            enable_think=enable_think,
+            enable_think=enable_think_agent,
             language=language,
         )
     else:
@@ -581,46 +584,50 @@ def _run_task_internal(
             f"Unknown agent type: {AgentConstructor}. Should be LLMAgent or LLMSoloAgent"
         )
 
+    # Construct user simulator with enable_think_user
     UserConstructor = registry.get_user_constructor(user)
-
-    user = UserConstructor(
+    user_instance = UserConstructor(
         persona=str(task.user_scenario.user_profile),
         instructions=str(task.instructions),
         llm=llm_user,
         llm_args=llm_args_user,
         language=language,
+        enable_think=enable_think_user,
     )
 
+    # Orchestrate the interaction
     orchestrator = Orchestrator(
         domain=domain,
-        agent=agent,
-        user=user,
+        agent=agent_instance,
+        user=user_instance,
         environment=environment,
         task=task,
         max_steps=max_steps,
         max_errors=max_errors,
         seed=seed,
         solo_mode=solo_mode,
-        language=language
+        language=language,
     )
     simulation = orchestrator.run()
 
+    # Evaluate the simulation with enable_think_evaluator
     reward_info = evaluate_simulation(
-        domain=domain,
-        task=task,
         simulation=simulation,
+        task=task,
         evaluation_type=evaluation_type,
+        domain=domain,
         llm_evaluator=llm_evaluator,
         llm_args_evaluator=llm_args_evaluator,
         language=language,
+        enable_think=enable_think_evaluator,
     )
     simulation.reward_info = reward_info
-    
+
     logger.info(
-        f"FINISHED SIMULATION: Domain: {domain}, Task: {task.id}, Agent: {agent.__class__.__name__}, User: {user.__class__.__name__}. "
+        f"FINISHED SIMULATION: Domain: {domain}, Task: {task.id}, Agent: {agent_instance.__class__.__name__}, User: {user_instance.__class__.__name__}. "
         f"Reward: {reward_info.reward} | {reward_info.reward_breakdown}"
     )
-    
+
     return simulation
 
 
@@ -639,12 +646,18 @@ def get_info(
     language: str = None,
 ) -> Info:
     def clean_llm_args(llm_args: Optional[dict]) -> Optional[dict]:
-        """Clean LLM arguments to make them JSON serializable"""
+        """Clean LLM arguments to make them JSON serializable and remove sensitive data"""
         if llm_args is None:
             return None
         
+        # Keys to exclude from saved logs (contain sensitive API keys)
+        sensitive_keys = {'headers'}
+        
         cleaned = {}
         for key, value in llm_args.items():
+            # Skip sensitive keys to avoid API key leakage
+            if key in sensitive_keys:
+                continue
             if hasattr(value, '__class__') and value.__class__.__name__ == 'type':
                 # Replace type objects with their class name
                 cleaned[key] = value.__name__
@@ -722,7 +735,7 @@ def re_evaluate_simulation(config: RunConfig) -> Results:
         raise FileNotFoundError(f"Simulation file not found: {re_evaluate_file}")
     
     # Load the original results
-    with open(simulation_path, "r") as fp:
+    with open(simulation_path, "r", encoding="utf-8") as fp:
         original_results = Results.model_validate_json(fp.read())
     
     logger.info(f"Loaded simulation file: {re_evaluate_file}")
@@ -759,7 +772,9 @@ def re_evaluate_simulation(config: RunConfig) -> Results:
             max_concurrency=config.max_concurrency,
             seed=config.seed,
             log_level=config.log_level,
-            enable_think=config.enable_think,
+            enable_think_agent=config.enable_think_agent,
+            enable_think_user=config.enable_think_user,
+            enable_think_evaluator=config.enable_think_evaluator,
             llm_evaluator=config.llm_evaluator,
             llm_args_evaluator=config.llm_args_evaluator,
             language=config.language,
@@ -818,6 +833,7 @@ def re_evaluate_simulation(config: RunConfig) -> Results:
                 llm_evaluator=config.llm_evaluator,
                 llm_args_evaluator=config.llm_args_evaluator,
                 language=config.language,
+                enable_think=config.enable_think_evaluator,
             )
             
             # Create a new simulation run with updated reward info

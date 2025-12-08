@@ -15,6 +15,9 @@ from vita.config import (
     DEFAULT_LLM_AGENT,
     DEFAULT_LLM_USER,
     DEFAULT_LLM_EVALUATOR,
+    DEFAULT_ENABLE_THINK_AGENT,
+    DEFAULT_ENABLE_THINK_USER,
+    DEFAULT_ENABLE_THINK_EVALUATOR,
     models,
 )
 from vita.data_model.simulation import RunConfig, EvaluationType
@@ -27,7 +30,7 @@ def add_run_args(parser):
         "--domain",
         "-d",
         type=str,
-        default="delivery,instore,ota",
+        default="delivery,ota,instore",
         help="The domain to run the simulation on",
     )
     parser.add_argument(
@@ -159,9 +162,22 @@ def add_run_args(parser):
         help="Path to CSV file to append results. If provided, will append all simulation results to this CSV file after completion.",
     )
     parser.add_argument(
-        "--enable-think",
+        "--enable-think-agent",
         action="store_true",
-        help="Enable think mode for the agent. Default is False.",
+        default=DEFAULT_ENABLE_THINK_AGENT,
+        help="Enable think mode for the agent LLM",
+    )
+    parser.add_argument(
+        "--enable-think-user",
+        action="store_true",
+        default=DEFAULT_ENABLE_THINK_USER,
+        help="Enable think mode for the user simulator LLM",
+    )
+    parser.add_argument(
+        "--enable-think-evaluator",
+        action="store_true",
+        default=DEFAULT_ENABLE_THINK_EVALUATOR,
+        help="Enable think mode for the evaluator LLM",
     )
     parser.add_argument(
         "--language",
@@ -210,7 +226,9 @@ def main():
                 log_level=args.log_level,
                 re_evaluate_file=getattr(args, 're_evaluate_file', None),
                 csv_output_file=getattr(args, 'csv_output', None),
-                enable_think=args.enable_think,
+                enable_think_agent=args.enable_think_agent,
+                enable_think_user=args.enable_think_user,
+                enable_think_evaluator=args.enable_think_evaluator,
                 language=args.language,
                 re_run=getattr(args, 're_run', False)
             )

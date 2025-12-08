@@ -12,7 +12,7 @@ class Prompts:
         prompt_yamls = self.get_prompt_yamls()
         for prompt_yaml in prompt_yamls:
             prompt_name = prompt_yaml.split('.')[0]
-            with open(os.path.join(os.path.dirname(__file__), prompt_yaml), 'r') as f:
+            with open(os.path.join(os.path.dirname(__file__), prompt_yaml), 'r', encoding='utf-8') as f:
                 prompt_data = yaml.load(f, Loader=yaml.FullLoader)
                 if self.language not in prompt_data:
                     raise ValueError(f"Language {self.language} not found in prompt {prompt_yaml}")

@@ -1,5 +1,5 @@
 import json
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -90,6 +90,9 @@ class ParticipantMessageBase(BaseModel):
     content: Optional[str] = Field(
         description="The content of the message.", default=None
     )
+    reasoning_content: Optional[Union[str, list]] = Field(
+        description="The reasoning content.", default=None
+    )
     tool_calls: Optional[list[ToolCall]] = Field(
         description="The tool calls made in the message.", default=None
     )
@@ -112,9 +115,11 @@ class ParticipantMessageBase(BaseModel):
         """
         Validate the message.
         """
-        if not (self.has_text_content() or self.is_tool_call()):
+        if not (
+            self.has_text_content() or self.is_tool_call() or self.has_reasoning_content()
+        ):
             raise ValueError(
-                f"AssistantMessage must have either content or tool calls. Got {self}"
+                f"Message must have content, reasoning_content, or tool calls. Got {self}"
             )
 
     def has_text_content(self) -> bool:
@@ -126,6 +131,18 @@ class ParticipantMessageBase(BaseModel):
         if isinstance(self.content, str) and self.content.strip() == "":
             return False
         return True
+
+    def has_reasoning_content(self) -> bool:
+        """
+        Check if the message has reasoning content (string or list).
+        """
+        if self.reasoning_content is None:
+            return False
+        if isinstance(self.reasoning_content, str):
+            return self.reasoning_content.strip() != ""
+        if isinstance(self.reasoning_content, list):
+            return len(self.reasoning_content) > 0
+        return bool(self.reasoning_content)
 
     def is_tool_call(self) -> bool:
         """

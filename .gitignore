@@ -18,8 +18,7 @@ dist/
 
 # virtualenv
 .venv/
-venv/
-ENV/
+.vita_bench
 
 # VSCode settings
 .vscode
@@ -35,5 +34,4 @@ ENV/
 .specstory
 
 # special files
-**/simulations
 **/configs

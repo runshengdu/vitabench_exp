@@ -46,7 +46,8 @@ dependencies = [
     "thefuzz",
     "holidays",
     "typing-extensions>=4.0.0",
-    "json-repair"
+    "json-repair",
+    "tiktoken>=0.7.0"
 ]
 [project.scripts]
 vita = "vita.cli:main"
