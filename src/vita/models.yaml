@@ -40,9 +40,9 @@ models:
       prompt_price: 14.00
       completion_price: 84.00
 
-  - name: minimax-m2
+  - name: Minimax-M2
     temperature: 1.0
-    base_url: https://api.minimaxi.com/v1/chat/completions
+    base_url: https://api.minimaxi.chat/v1/text/chatcompletion_v2
     headers:
       Authorization: "Bearer ${MINIMAX_API_KEY}"
       Content-Type: "application/json"

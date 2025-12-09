@@ -18,7 +18,6 @@ def evaluate_simulation(
     """
     if simulation.termination_reason in {
         TerminationReason.TOO_MANY_ERRORS,
-        TerminationReason.MAX_STEPS,
         TerminationReason.INVALID_AGENT_MESSAGE,
     }:
         return RewardInfo(

@@ -261,6 +261,16 @@ def kwargs_adapter(data: dict, enable_think: bool, messages: list) -> dict:
         # For Anthropic Claude via OpenRouter, enable prompt caching on system
         # messages by inserting cache_control markers into the text content.
         data["messages"] = apply_anthropic_prompt_cache(data["messages"], messages)
+    elif "minimax" in model_name:
+        # MiniMax models: support Anthropic-compatible prompt caching
+        # See: https://platform.minimaxi.com/docs/api-reference/text-prompt-caching
+        # MiniMax uses the same cache_control: {"type": "ephemeral"} format as Anthropic
+        data["messages"] = apply_anthropic_prompt_cache(data["messages"], messages)
+        # Non-Claude models: use a generic top-level thinking flag without changing messages
+        if enable_think:
+            data["thinking"] = {"type": "enabled"}
+        else:
+            data["thinking"] = {"type": "disabled"}
     else:
         # Non-Claude models: use a generic top-level thinking flag without changing messages
         if enable_think:

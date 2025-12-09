@@ -351,6 +351,11 @@ def run_tasks(
             raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
         if save_to is None:
             return
+        # Skip saving simulations with invalid_agent_message termination reason
+        # so they can be re-run when resuming with --save-to
+        if simulation.termination_reason == "invalid_agent_message":
+            logger.warning(f"Skipping save for task {simulation.task_id} due to invalid_agent_message termination")
+            return
         with lock:
             with open(save_to, "r", encoding="utf-8") as fp:
                 ckpt = json.load(fp)
@@ -732,7 +737,10 @@ def re_evaluate_simulation(config: RunConfig) -> Results:
     # Load the original simulation results
     simulation_path = Path(re_evaluate_file)
     if not simulation_path.exists():
-        raise FileNotFoundError(f"Simulation file not found: {re_evaluate_file}")
+        # Try looking in the default simulations directory
+        simulation_path = DATA_DIR / "simulations" / re_evaluate_file
+        if not simulation_path.exists():
+            raise FileNotFoundError(f"Simulation file not found: {re_evaluate_file}")
     
     # Load the original results
     with open(simulation_path, "r", encoding="utf-8") as fp:

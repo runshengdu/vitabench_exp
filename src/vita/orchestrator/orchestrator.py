@@ -32,6 +32,10 @@ class Role(str, Enum):
     ENV = "env"
 
 
+# Number of consecutive identical user messages to trigger forced stop
+USER_REPETITION_THRESHOLD = 3
+
+
 def get_default_first_agent_message(language: str = None) -> AssistantMessage:
     """Get the default first agent message based on language"""
     if language is None:
@@ -252,6 +256,34 @@ class Orchestrator:
         )
         return simulation_run
 
+    def _check_user_repetition(self, threshold: int) -> bool:
+        """
+        Check if the last `threshold` user messages have identical content.
+        
+        Args:
+            threshold: Number of consecutive identical messages to trigger detection
+            
+        Returns:
+            True if the last `threshold` user messages are identical, False otherwise
+        """
+        if threshold < 2:
+            return False
+        
+        # Collect recent user messages from trajectory
+        user_messages = []
+        for msg in reversed(self.trajectory):
+            if isinstance(msg, UserMessage) and msg.content:
+                user_messages.append(msg.content.strip())
+                if len(user_messages) >= threshold:
+                    break
+        
+        # Check if we have enough messages and they are all identical
+        if len(user_messages) < threshold:
+            return False
+        
+        first_content = user_messages[0]
+        return all(content == first_content for content in user_messages)
+
     def step(self):
         """
         Perform one step of the simulation.
@@ -314,6 +346,15 @@ class Orchestrator:
                 return
             
             agent_msg.validate()
+            
+            # Check for user repetition and force stop if detected
+            if self._check_user_repetition(USER_REPETITION_THRESHOLD):
+                logger.warning(
+                    f"Detected {USER_REPETITION_THRESHOLD} consecutive identical user messages. "
+                    f"Forcing agent to stop."
+                )
+                agent_msg.content = self.agent.STOP_TOKEN
+            
             if self.agent.is_stop(agent_msg):
                 self.done = True
                 self.termination_reason = TerminationReason.AGENT_STOP
