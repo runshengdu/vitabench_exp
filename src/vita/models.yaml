@@ -82,7 +82,7 @@ models:
 
   - name: kimi-k2-thinking
     temperature: 1.0
-    base_url: https://api.moonshot.ai/v1/chat/completions
+    base_url: https://api.moonshot.cn/v1/chat/completions
     headers:
       Authorization: "Bearer ${MOONSHOT_API_KEY}"
       Content-Type: "application/json"

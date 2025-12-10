@@ -256,15 +256,21 @@ class Orchestrator:
         )
         return simulation_run
 
+    # Common patterns that indicate repetitive behavior
+    REPETITION_KEYWORDS = ["bye", "goodbye", "thank you", "no response needed", "end of conversation", "conversation ends"]
+
     def _check_user_repetition(self, threshold: int) -> bool:
         """
-        Check if the last `threshold` user messages have identical content.
+        Check if the last `threshold` user messages indicate a repetitive loop.
+        
+        Detection methods:
+        1. Keyword match: All messages contain the same repetition keyword
         
         Args:
-            threshold: Number of consecutive identical messages to trigger detection
+            threshold: Number of consecutive messages to trigger detection
             
         Returns:
-            True if the last `threshold` user messages are identical, False otherwise
+            True if repetition is detected, False otherwise
         """
         if threshold < 2:
             return False
@@ -277,12 +283,24 @@ class Orchestrator:
                 if len(user_messages) >= threshold:
                     break
         
-        # Check if we have enough messages and they are all identical
+        # Check if we have enough messages
         if len(user_messages) < threshold:
             return False
         
-        first_content = user_messages[0]
-        return all(content == first_content for content in user_messages)
+        # Method 2: Keyword match - all messages contain the same keyword
+        def find_keyword(text: str) -> str | None:
+            text_lower = text.lower()
+            for keyword in self.REPETITION_KEYWORDS:
+                if keyword in text_lower:
+                    return keyword
+            return None
+        
+        keywords = [find_keyword(msg) for msg in user_messages]
+        if all(k is not None for k in keywords) and len(set(keywords)) == 1:
+            logger.info(f"Detected keyword repetition '{keywords[0]}' in last {threshold} user messages")
+            return True
+        
+        return False
 
     def step(self):
         """
